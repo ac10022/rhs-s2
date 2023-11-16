@@ -34,3 +34,7 @@ end, ON.SCRIPT_ENABLE)
 set_callback(function()
     level_sequence.deactivate()
 end, ON.SCRIPT_DISABLE)
+
+set_callback(function(ctx, hud)
+    hud.opacity = 0
+end, ON.RENDER_PRE_HUD)
