@@ -1,3 +1,5 @@
+local filehandling = require("filehandling")
+
 meta = {
     name = 'RHS',
     version = '1.0',
@@ -5,7 +7,7 @@ meta = {
     author = 'ac10022',
 }
 
--- dotted line at x = 19
+register_option_combo("chosen_map", "Map", "Choose a map to play", filehandling.get_options_string().."\0\0", 1)
 
 local level_sequence = require("LevelSequence/level_sequence")
 local IB = require("invisibleblock")

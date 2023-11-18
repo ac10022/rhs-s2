@@ -1,5 +1,6 @@
 local filehandling = require("filehandling")
 local drawing = require("drawing")
+local screen_fx = require("screenfx")
 
 local level1 = {
     identifier = "level1",
@@ -12,13 +13,15 @@ local level_state = {
     -- generic
     loaded = false,
     callbacks = {},
+    current_playing_audio = nil,
     -- game specific
     orb_speed = 0.15,
     map_accuracy_accumulative = 0,
     map_accuracy_percentage = 0,
     notes_passed = 0,
     crit = 0,
-    map_audio = nil
+    map_audio = nil,
+    audio_paused = false
 }
 
 local function reset_level_state()
@@ -27,6 +30,8 @@ local function reset_level_state()
     level_state.map_accuracy_percentage = 0
     level_state.map_audio = nil
     level_state.crit = 0
+    level_state.current_playing_audio = nil
+    level_state.audio_paused = false
 end
 
 local ORB_LEVELS = {
@@ -43,6 +48,9 @@ local HIT_ACCURACY = {
 
 local function recalculate_accuracy(x_destroyed)
     if level_state.notes_passed == 0 then return end
+    if level_state.crit % 3 == 0 and level_state.crit ~= 0 then
+        screen_fx.streak_effect()
+    end
     local deviation = math.abs((x_destroyed/19) - 1)
     if (deviation < 0.05) then
         level_state.map_accuracy_accumulative = level_state.map_accuracy_accumulative + HIT_ACCURACY.MARVELOUS
@@ -68,7 +76,6 @@ local function spawn_orb(orb_level)
     -- stops looping sound
     get_entity(new_orb).sound.playing = false
 
-    -- if orb destroyed remove from list
     get_entity(new_orb):set_post_destroy(function(orb)
         if orb.x < 12.5 then
             level_state.crit = 0
@@ -87,8 +94,14 @@ level1.load_level = function()
 
     if level_state.loaded then return end
     
+    set_timeout(function()
+        screen_fx.get_screen_bounds()
+    end, 60)
+
     reset_level_state()
     drawing.reset_draw_data()
+    drawing.initialize()
+    local chosen_map = tostring(options.chosen_map)
     level_state.loaded = true
 
     -- destroy osiris and anubis
@@ -106,7 +119,7 @@ level1.load_level = function()
     end, 1)
 
     -- map content handling
-    local map_content = filehandling.read_map("1")
+    local map_content = filehandling.read_map(chosen_map)
     local map_length
 
     -- ensure map content has been read first
@@ -114,11 +127,11 @@ level1.load_level = function()
         map_length = filehandling.find_map_length(map_content)
     end, 5)
 
-    level_state.map_audio = filehandling.get_map_audio("1")
+    level_state.map_audio = filehandling.get_map_audio(chosen_map)
     
     set_timeout(function()
         if level_state.map_audio then
-            level_state.map_audio:play()
+            level_state.current_playing_audio = level_state.map_audio:play()
         end
     end, 10)
 
@@ -129,7 +142,6 @@ level1.load_level = function()
             level_state.callbacks[#level_state.callbacks+1] = set_interval(function()
                 -- if map has not finished
                 if state.time_level < map_length then
-                    -- godd damnit
                     local current_frame_action = map_content[state.time_level + 65]
                     if current_frame_action ~= nil then
                         if current_frame_action == '1' then
@@ -191,6 +203,19 @@ level1.load_level = function()
         end)
     end, SPAWN_TYPE.ANY, MASK.ITEM, ENT_TYPE.ITEM_ROCK)
 
+    -- audio handling
+    level_state.callbacks[#level_state.callbacks+1] = set_callback(function()
+        if level_state.map_audio then
+            if game_manager.pause_ui.visibility ~= 0 then
+                level_state.current_playing_audio:set_pause(true)
+                level_state.audio_paused = true
+            elseif level_state.audio_paused then
+                level_state.current_playing_audio:set_pause(false)
+                level_state.audio_paused = false
+            end
+        end
+    end, ON.GUIFRAME)
+
 end
 
 level1.unload_level = function()
@@ -198,10 +223,17 @@ level1.unload_level = function()
 
     drawing.reset_draw_data()
 
+    -- stops current audio
+    if level_state.current_playing_audio then
+        level_state.current_playing_audio:stop()
+    end
+
     local callbacks_to_clear = level_state.callbacks
 
     level_state.loaded = false
     level_state.callbacks = {}
+    -- reset all game data
+    reset_level_state()
 
     for _, callback in pairs(callbacks_to_clear) do
         clear_callback(callback)
