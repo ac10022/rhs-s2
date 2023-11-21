@@ -5,11 +5,10 @@ local draw_data = {
     grade = nil,
     grade_color = rgba(255, 255, 255, 255),
     in_level = false,
-    open_menu = false,
 }
 
 set_callback(function(draw_ctx)
-    if game_manager.pause_ui.visibility == 0 then
+    if game_manager.pause_ui.visibility == 0 and state.screen == 12 then
         if draw_data.in_level then
             local x18 = screen_position(18,0)
             local x19 = screen_position(19,0)
@@ -29,9 +28,6 @@ set_callback(function(draw_ctx)
         if draw_data.grade then
             draw_ctx:draw_text(-0.9, 0.85, 60.0, draw_data.grade, draw_data.grade_color)
         end 
-        if draw_data.open_menu then
-            draw_ctx:draw_rect_filled(-0.8, 0.8, 0.8, -0.8, 0.0, rgba(0, 0, 0, 180))
-        end
     end
 end, ON.GUIFRAME)
 
@@ -92,16 +88,7 @@ local function reset_draw_data()
         grade = nil,
         grade_color = rgba(255, 255, 255, 255),
         in_level = false,
-        open_menu = false,
     }
-end
-
-local function open_menu(on)
-    if on then
-        draw_data.open_menu = true
-    else
-        draw_data.open_menu = false
-    end
 end
 
 return {
@@ -111,5 +98,4 @@ return {
     set_grade = set_grade,
     reset_draw_data = reset_draw_data,
     initialize = initialize,
-    open_menu = open_menu,
 }

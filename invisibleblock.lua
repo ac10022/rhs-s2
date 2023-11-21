@@ -6,11 +6,6 @@ TEXTURE.width, TEXTURE.height, TEXTURE.tile_width, TEXTURE.tile_height, TEXTURE.
 
 local function activate()
 
-    -- Spawns an invisible block.
-    --
-    -- Returns: the button entity
-    --
-    -- x, y, layer: co-ordinates and layer of the button
     local function spawn_invisible_block(x, y, layer)
         local ib_uid = spawn_entity(ENT_TYPE.FLOOR_YAMA_PLATFORM, x, y, layer, 0, 0)
         local ib = get_entity(ib_uid)

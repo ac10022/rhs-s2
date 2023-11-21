@@ -1,6 +1,7 @@
 local filehandling = require("filehandling")
 local drawing = require("drawing")
 local screen_fx = require("screenfx")
+local scorehandling = require("scorehandling")
 
 local level1 = {
     identifier = "level1",
@@ -19,9 +20,11 @@ local level_state = {
     map_accuracy_accumulative = 0,
     map_accuracy_percentage = 0,
     notes_passed = 0,
+    highest_crit = 0,
     crit = 0,
     map_audio = nil,
-    audio_paused = false
+    audio_paused = false,
+    total_notes = nil,
 }
 
 local function reset_level_state()
@@ -30,8 +33,10 @@ local function reset_level_state()
     level_state.map_accuracy_percentage = 0
     level_state.map_audio = nil
     level_state.crit = 0
+    level_state.highest_crit = 0
     level_state.current_playing_audio = nil
     level_state.audio_paused = false
+    level_state.total_notes = nil
 end
 
 local ORB_LEVELS = {
@@ -67,6 +72,15 @@ local function recalculate_accuracy(x_destroyed)
     drawing.set_accuracy(string.format("%.2f", level_state.map_accuracy_percentage))
 end
 
+local function recalculate_score()
+    if level_state.total_notes ~= nil then
+        local total_score = 1000000 * (level_state.map_accuracy_percentage / 100) * (level_state.notes_passed / level_state.total_notes)
+        drawing.set_score(math.ceil(total_score))
+        return total_score
+    end
+    return 0
+end
+
 local function spawn_orb(orb_level)
     
     -- spawn new orb 
@@ -77,17 +91,39 @@ local function spawn_orb(orb_level)
     get_entity(new_orb).sound.playing = false
 
     get_entity(new_orb):set_post_destroy(function(orb)
+
         if orb.x < 12.5 then
             level_state.crit = 0
         else
             level_state.crit = level_state.crit + 1
         end
+
+        if level_state.crit > level_state.highest_crit then
+            level_state.highest_crit = level_state.crit
+        end
+
         level_state.notes_passed = level_state.notes_passed + 1
+
         recalculate_accuracy(orb.x)
+        recalculate_score()
         drawing.set_crit(tostring(level_state.crit))
+        
         return false
+
     end)
 
+end
+
+local function do_end_sequence()
+
+    local score_data = scorehandling.create(recalculate_score(), level_state.highest_crit)
+    filehandling.push_save_data_to_file(score_data, tostring(filehandling.get_map_order()[options.chosen_map]))
+
+    set_timeout(function()
+        print("end")
+        level_state.current_playing_audio:stop()
+    end, 60)
+    
 end
 
 level1.load_level = function()
@@ -101,7 +137,7 @@ level1.load_level = function()
     reset_level_state()
     drawing.reset_draw_data()
     drawing.initialize()
-    local chosen_map = tostring(options.chosen_map)
+    local chosen_map = filehandling.get_map_order()[options.chosen_map]
     level_state.loaded = true
 
     -- destroy osiris and anubis
@@ -120,6 +156,7 @@ level1.load_level = function()
 
     -- map content handling
     local map_content = filehandling.read_map(chosen_map)
+    level_state.total_notes = filehandling.total_notes(map_content)
     local map_length
 
     -- ensure map content has been read first
@@ -150,6 +187,9 @@ level1.load_level = function()
                             spawn_orb(ORB_LEVELS.UPPER)
                         end
                     end
+                else
+                    do_end_sequence()
+                    --clear_callback()
                 end
             end, 1)
         end
@@ -213,8 +253,27 @@ level1.load_level = function()
                 level_state.current_playing_audio:set_pause(false)
                 level_state.audio_paused = false
             end
+            if state.screen ~= 12 then
+                level_state.current_playing_audio:stop()
+                reset_level_state()
+                drawing.reset_draw_data()
+            end
         end
     end, ON.GUIFRAME)
+
+    level_state.callbacks[#level_state.callbacks+1] = set_callback(function()
+        if level_state.map_audio then
+            level_state.current_playing_audio:stop()
+        end
+        reset_level_state()
+        drawing.reset_draw_data()
+    end, ON.DEATH)
+
+    level_state.callbacks[#level_state.callbacks+1] = set_callback(function()
+        -- anchor player
+        players[1].x = 14
+        players[1].y = 109.05
+    end, ON.GAMEFRAME)
 
 end
 
