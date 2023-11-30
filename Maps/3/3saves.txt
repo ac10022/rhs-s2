@@ -1,3 +1,4 @@
-995625.0
-4
-Tuesday, 11 November 2023
+SAVEDATA
+Score: 994231.57894737 SEND
+HC: 928 CEND
+Date: Sunday, 11 November 2023 DEND

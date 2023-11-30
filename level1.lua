@@ -25,6 +25,8 @@ local level_state = {
     map_audio = nil,
     audio_paused = false,
     total_notes = nil,
+    -- callback specific
+    frame_interval_callback = nil,
 }
 
 local function reset_level_state()
@@ -37,6 +39,7 @@ local function reset_level_state()
     level_state.current_playing_audio = nil
     level_state.audio_paused = false
     level_state.total_notes = nil
+    level_state.frame_interval_callback = nil
 end
 
 local ORB_LEVELS = {
@@ -45,7 +48,7 @@ local ORB_LEVELS = {
 }
 
 local HIT_ACCURACY = {
-    MARVELOUS = 1.0,
+    MARVELLOUS = 1.0,
     PERFECT = 0.9825,
     GREAT = 0.65,
     GOOD = 0.25
@@ -53,20 +56,30 @@ local HIT_ACCURACY = {
 
 local function recalculate_accuracy(x_destroyed)
     if level_state.notes_passed == 0 then return end
-    if level_state.crit % 3 == 0 and level_state.crit ~= 0 then
+    if level_state.crit % 5 == 0 and level_state.crit ~= 0 then
         screen_fx.streak_effect()
     end
     local deviation = math.abs((x_destroyed/19) - 1)
-    if (deviation < 0.05) then
-        level_state.map_accuracy_accumulative = level_state.map_accuracy_accumulative + HIT_ACCURACY.MARVELOUS
-    elseif (deviation < 0.2) then
+    if (deviation < 0.03) then
+        level_state.map_accuracy_accumulative = level_state.map_accuracy_accumulative + HIT_ACCURACY.MARVELLOUS
+        drawing.set_hit_grade("MARVELLOUS")
+        drawing.set_hit_grade_color(rgba(227, 277, 216, 100))
+    elseif (deviation < 0.06) then
         level_state.map_accuracy_accumulative = level_state.map_accuracy_accumulative + HIT_ACCURACY.PERFECT
-    elseif (deviation < 0.4) then
+        drawing.set_hit_grade("PERFECT")
+        drawing.set_hit_grade_color(rgba(245, 200, 20, 100))
+    elseif (deviation < 0.1) then
         level_state.map_accuracy_accumulative = level_state.map_accuracy_accumulative + HIT_ACCURACY.GREAT
-    elseif (deviation < 0.5) then
+        drawing.set_hit_grade("GREAT")
+        drawing.set_hit_grade_color(rgba(65, 191, 15, 100))
+    elseif (deviation < 0.3) then
         level_state.map_accuracy_accumulative = level_state.map_accuracy_accumulative + HIT_ACCURACY.GOOD
+        drawing.set_hit_grade("GOOD")
+        drawing.set_hit_grade_color(rgba(15, 177, 191, 100))
     else
         level_state.map_accuracy_accumulative = level_state.map_accuracy_accumulative - 1
+        drawing.set_hit_grade("MISS")
+        drawing.set_hit_grade_color(rgba(201, 28, 46, 100))
     end
     level_state.map_accuracy_percentage = (level_state.map_accuracy_accumulative / level_state.notes_passed) * 100
     drawing.set_accuracy(string.format("%.2f", level_state.map_accuracy_percentage))
@@ -75,7 +88,7 @@ end
 local function recalculate_score()
     if level_state.total_notes ~= nil then
         local total_score = 1000000 * (level_state.map_accuracy_percentage / 100) * (level_state.notes_passed / level_state.total_notes)
-        drawing.set_score(math.ceil(total_score))
+        drawing.set_score(tostring(math.ceil(total_score)))
         return total_score
     end
     return 0
@@ -116,12 +129,13 @@ end
 
 local function do_end_sequence()
 
-    local score_data = scorehandling.create(recalculate_score(), level_state.highest_crit)
-    filehandling.push_save_data_to_file(score_data, tostring(filehandling.get_map_order()[options.chosen_map]))
-
     set_timeout(function()
-        print("end")
+
+        local score_data = scorehandling.create(recalculate_score(), level_state.highest_crit)
+        filehandling.push_save_data_to_file(score_data, tostring(filehandling.get_map_order()[options.chosen_map]))
         level_state.current_playing_audio:stop()
+        warp(1, 1, THEME.BASE_CAMP)
+
     end, 60)
     
 end
@@ -157,7 +171,18 @@ level1.load_level = function()
     -- map content handling
     local map_content = filehandling.read_map(chosen_map)
     level_state.total_notes = filehandling.total_notes(map_content)
+    if level_state.total_notes == 0 or level_state.total_notes == nil then
+        print(F"Warning: could not find any notes in Maps/{chosen_map}/{chosen_map}.txt, has it been formatted correctly? (e.g., 000001_1;)")
+    end
     local map_length
+
+    -- if save load save
+    local save_exists = filehandling.save_data_exists(chosen_map)
+    local save_score, save_highest_crit, save_date = filehandling.get_map_savedata(chosen_map)
+
+    if save_exists and save_score and save_highest_crit and save_date then
+        drawing.set_save_data(tostring(math.floor(save_score)), tostring(save_highest_crit), save_date)
+    end
 
     -- ensure map content has been read first
     set_timeout(function()
@@ -176,7 +201,8 @@ level1.load_level = function()
 
         -- if map has content
         if map_content then
-            level_state.callbacks[#level_state.callbacks+1] = set_interval(function()
+            -- level_state.callbacks[#level_state.callbacks+1] = set_interval(function()
+            level_state.frame_interval_callback = set_interval(function()
                 -- if map has not finished
                 if state.time_level < map_length then
                     local current_frame_action = map_content[state.time_level + 65]
@@ -189,7 +215,8 @@ level1.load_level = function()
                     end
                 else
                     do_end_sequence()
-                    --clear_callback()
+                    level_state.frame_interval_callback = nil
+                    clear_callback()
                 end
             end, 1)
         end
@@ -270,9 +297,19 @@ level1.load_level = function()
     end, ON.DEATH)
 
     level_state.callbacks[#level_state.callbacks+1] = set_callback(function()
+
         -- anchor player
         players[1].x = 14
         players[1].y = 109.05
+
+        -- destroy stray rocks
+        for _, uid in ipairs(get_entities_by(ENT_TYPE.ITEM_ROCK, MASK.ITEM, LAYER.PLAYER1)) do
+            local ent = get_entity(uid)
+            if ent.x > 29 then
+                ent:destroy()
+            end
+        end
+
     end, ON.GAMEFRAME)
 
 end
@@ -288,6 +325,10 @@ level1.unload_level = function()
     end
 
     local callbacks_to_clear = level_state.callbacks
+
+    if level_state.frame_interval_callback then
+        clear_callback(level_state.frame_interval_callback)
+    end
 
     level_state.loaded = false
     level_state.callbacks = {}

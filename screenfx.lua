@@ -105,5 +105,5 @@ return {
     get_screen_bounds = get_screen_bounds,
     do_horizontal_effect = do_horizontal_effect,
     do_horizontal_effect_with_pattern = do_horizontal_effect_with_pattern,
-    streak_effect = streak_effect
+    streak_effect = streak_effect,
 }

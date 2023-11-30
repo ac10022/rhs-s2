@@ -4,7 +4,7 @@ meta = {
     name = 'RHS',
     version = '1.0',
     description = 'test',
-    author = 'ac10022',
+    author = 'hi logan',
 }
 
 register_option_combo("chosen_map", "Map", "Choose a map to play", filehandling.get_options_string().."\0\0", 1)
